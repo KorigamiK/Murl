@@ -1,0 +1,32 @@
+# Configuration for Doxygen for use with CMake
+# Only options that deviate from the default are included
+# To create a new Doxyfile containing all available options, call `doxygen -g`
+
+# Get Project name and version from CMake
+PROJECT_NAME = "murl"
+PROJECT_NUMBER = "0.1.0"
+
+# Add sources
+INPUT = "/home/origami/Dev/projects/graphics/murl/README.md" "/home/origami/Dev/projects/graphics/murl/include" "/home/origami/Dev/projects/graphics/murl/docs/pages"
+EXTRACT_ALL = YES
+RECURSIVE = YES
+OUTPUT_DIRECTORY = ""
+
+# Use the README as a main page
+USE_MDFILE_AS_MAINPAGE = "/home/origami/Dev/projects/graphics/murl/README.md"
+
+# set relative include paths
+FULL_PATH_NAMES = YES
+STRIP_FROM_PATH = "/home/origami/Dev/projects/graphics/murl/include" "/home/origami/Dev/projects/graphics/murl"
+STRIP_FROM_INC_PATH =
+
+# We use m.css to generate the html documentation, so we only need XML output
+GENERATE_XML = YES
+GENERATE_HTML = NO
+GENERATE_LATEX = NO
+XML_PROGRAMLISTING = NO
+CREATE_SUBDIRS = NO
+
+# Include all directories, files and namespaces in the documentation
+# Disable to include only explicitly documented objects
+M_SHOW_UNDOCUMENTED = YES
