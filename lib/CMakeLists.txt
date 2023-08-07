@@ -37,10 +37,3 @@ target_compile_definitions(
 	PRIVATE
 		${DEFINES}
 )
-
-# Symbolic link of shaders to build directory
-execute_process(
-	COMMAND ${CMAKE_COMMAND} -E create_symlink
-	${CMAKE_CURRENT_SOURCE_DIR}/shaders
-	${CMAKE_CURRENT_BINARY_DIR}/shaders
-)

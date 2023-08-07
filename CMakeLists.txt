@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 
 project(
-	murl
+	Murl
 	VERSION 0.1.0
 	DESCRIPTION "Music Uptake Rendering Library"
 	HOMEPAGE_URL "https://github.com/korigamik/murl"
@@ -9,6 +9,21 @@ project(
 )
 
 add_subdirectory(lib)
+
+file(GLOB_RECURSE SOURCES "src/*.cc")
+file(GLOB_RECURSE HEADERS "include/*.hh")
+
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+target_link_libraries(${PROJECT_NAME} PRIVATE LibMurl)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
+
+
+# Symbolic link of shaders to build directory
+execute_process(
+	COMMAND ${CMAKE_COMMAND} -E create_symlink
+	${CMAKE_CURRENT_SOURCE_DIR}/shaders
+	${CMAKE_CURRENT_BINARY_DIR}/shaders
+)
 
 enable_testing()
 

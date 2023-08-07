@@ -3,7 +3,7 @@
 # To create a new Doxyfile containing all available options, call `doxygen -g`
 
 # Get Project name and version from CMake
-PROJECT_NAME = "murl"
+PROJECT_NAME = "Murl"
 PROJECT_NUMBER = "0.1.0"
 
 # Add sources
