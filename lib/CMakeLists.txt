@@ -9,7 +9,11 @@ file(GLOB_RECURSE HEADERS "include/*.hh")
 message(STATUS "Sources: ${SOURCES}")
 message(STATUS "Headers: ${HEADERS}")
 
-add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
+if(Emscripten)
+	add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
+else()
+	add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
+endif()
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
