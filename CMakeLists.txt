@@ -14,20 +14,74 @@ file(GLOB_RECURSE SOURCES "src/*.cc")
 file(GLOB_RECURSE HEADERS "include/*.hh")
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
-target_link_libraries(${PROJECT_NAME} PRIVATE LibMurl)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
+if (EMSCRIPTEN)
+	set(CMAKE_EXECUTABLE_SUFFIX ".html")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s USE_SDL=2")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s FULL_ES3=1 -s USE_WEBGL2=1")
+	# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -sEXIT_RUNTIME")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --preload-file shaders")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s WARN_ON_UNDEFINED_SYMBOLS=1 -sASSERTIONS=1")
+	set(OPENGL_ES_2 TRUE)
+	# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --preload-file ${CMAKE_SOURCE_DIR}/logo.png@/")
 
+	target_include_directories(
+		${PROJECT_NAME} 
+		PUBLIC 
+			${CMAKE_SOURCE_DIR}/include
+	)
+
+	target_link_libraries(
+		${PROJECT_NAME} 
+		PRIVATE 
+			LibMurl 
+	)
+
+else()
+
+	# Use pkg-config to find SDL2 and GLEW
+	find_package(glm REQUIRED) # GL Mathematics (GLM)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(SDL2 REQUIRED sdl2) # SDL2
+	pkg_check_modules(GLEW REQUIRED glew) # GL Extension Wrangler (GLEW)
+
+	message(STATUS "SDL2_INCLUDE_DIRS: ${SDL2_INCLUDE_DIRS}")
+	message(STATUS "SDL2_LIBRARIES: ${SDL2_LIBRARIES}")
+	message(STATUS "GLEW_INCLUDE_DIRS: ${GLEW_INCLUDE_DIRS}")
+	message(STATUS "GLEW_LIBRARIES: ${GLEW_LIBRARIES}")
+	message(STATUS "GLM_INCLUDE_DIRS: ${GLM_INCLUDE_DIRS}")
+
+	target_include_directories(
+		${PROJECT_NAME} 
+		PUBLIC 
+			${CMAKE_SOURCE_DIR}/include
+		PRIVATE
+			${SDL2_INCLUDE_DIRS}
+			${GLEW_INCLUDE_DIRS}
+			${GLM_INCLUDE_DIRS}
+	)
+
+	target_link_libraries(
+		${PROJECT_NAME} 
+		PRIVATE 
+			LibMurl 
+		PUBLIC
+			${SDL2_LIBRARIES}
+			${GLEW_LIBRARIES}
+	)
+
+	
+	enable_testing()
+	
+endif()
+	
 # Symbolic link of shaders to build directory
 execute_process(
 	COMMAND ${CMAKE_COMMAND} -E create_symlink
 	${CMAKE_CURRENT_SOURCE_DIR}/shaders
 	${CMAKE_CURRENT_BINARY_DIR}/shaders
 )
-
-enable_testing()
-
-set(BUILD_TESTING ON CACHE BOOL "Build tests")
 
 if (BUILD_TESTING)
 	add_subdirectory(test)

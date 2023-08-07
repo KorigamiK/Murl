@@ -9,7 +9,7 @@ file(GLOB_RECURSE HEADERS "include/*.hh")
 message(STATUS "Sources: ${SOURCES}")
 message(STATUS "Headers: ${HEADERS}")
 
-if(Emscripten)
+if(EMSCRIPTEN)
 	add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
 else()
 	add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
