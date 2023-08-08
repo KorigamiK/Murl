@@ -93,9 +93,7 @@ static void* mainLoopArg;
 static SDL_Window* window;
 
 // Matrices for transformation
-glm::mat4 model = glm::mat4(1.0f);
-glm::mat4 view = glm::mat4(1.0f);
-glm::mat4 projection = glm::mat4(1.0f);
+glm::mat4 transform = glm::mat4(1.0f);
 bool quit = false;
 
 void mainLoop(void* arg) {
@@ -126,22 +124,21 @@ void mainLoop(void* arg) {
     }
   }
 
-  // Update model matrix based on mouse position
+  // Update transform matrix based on mouse position
   int mouseX, mouseY;
   SDL_GetMouseState(&mouseX, &mouseY);
   float xPos = static_cast<float>(mouseX) / static_cast<float>(SCR_WIDTH) * 2.0f - 1.0f;
   float yPos = -static_cast<float>(mouseY) / static_cast<float>(SCR_HEIGHT) * 2.0f + 1.0f;
-  model = glm::translate(glm::mat4(1.0f), glm::vec3(xPos, yPos, 0.0f));
+  transform = glm::translate(glm::mat4(1.0f), glm::vec3(xPos, yPos, 0.0f));
 
   // Clear the screen
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   // Use shader program and set uniforms
   glUseProgram(shaderProgram);
-  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
-  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
-  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+  GLuint transformLoc = glGetUniformLocation(shaderProgram, "transform");
+  glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
 
   // Draw the triangle
   glBindVertexArray(VAO);
