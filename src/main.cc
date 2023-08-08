@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "SDL_video.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -17,6 +18,9 @@
 
 const char* vertexShaderPath = "shaders/default.vert.glsl";
 const char* fragmentShaderPath = "shaders/default.frag.glsl";
+
+unsigned int SCR_WIDTH = 800;
+unsigned int SCR_HEIGHT = 600;
 
 // Function to read shader code from a file
 std::string ReadShaderCode(const char* filePath) {
@@ -46,7 +50,6 @@ GLuint CompileShader(GLenum shaderType, const char* shaderCode) {
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logSize);
     std::vector<GLchar> errorLog(logSize);
     glGetShaderInfoLog(shader, logSize, nullptr, errorLog.data());
-
     std::cerr << "Shader compilation error:\n" << shaderCode << std::endl << errorLog.data() << std::endl;
     glDeleteShader(shader);
     exit(EXIT_FAILURE);
@@ -99,15 +102,35 @@ void mainLoop(void* arg) {
   (void)arg;
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
-    if (event.type == SDL_QUIT)
-      quit = true;
+    switch (event.type) {
+      case SDL_QUIT:
+        quit = true;
+        break;
+      case SDL_KEYDOWN:
+        switch (event.key.keysym.sym) {
+          case SDLK_ESCAPE:
+            quit = true;
+            break;
+        }
+        break;
+      case SDL_WINDOWEVENT:
+        switch (event.window.event) {
+          case SDL_WINDOWEVENT_RESIZED:
+            glViewport(0, 0, event.window.data1, event.window.data2);
+            SCR_WIDTH = event.window.data1;
+            SCR_HEIGHT = event.window.data2;
+            break;
+        }
+      default:
+        break;
+    }
   }
 
   // Update model matrix based on mouse position
   int mouseX, mouseY;
   SDL_GetMouseState(&mouseX, &mouseY);
-  float xPos = static_cast<float>(mouseX) / 800.0f * 2.0f - 1.0f;
-  float yPos = -static_cast<float>(mouseY) / 600.0f * 2.0f + 1.0f;
+  float xPos = static_cast<float>(mouseX) / static_cast<float>(SCR_WIDTH) * 2.0f - 1.0f;
+  float yPos = -static_cast<float>(mouseY) / static_cast<float>(SCR_HEIGHT) * 2.0f + 1.0f;
   model = glm::translate(glm::mat4(1.0f), glm::vec3(xPos, yPos, 0.0f));
 
   // Clear the screen
@@ -116,9 +139,9 @@ void mainLoop(void* arg) {
 
   // Use shader program and set uniforms
   glUseProgram(shaderProgram);
-  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, &model[0][0]);
-  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, &view[0][0]);
-  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, &projection[0][0]);
+  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+  glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
   // Draw the triangle
   glBindVertexArray(VAO);
@@ -136,8 +159,8 @@ int main() {
     return EXIT_FAILURE;
   }
 
-  window =
-      SDL_CreateWindow("Hello Triangle", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, SDL_WINDOW_OPENGL);
+  window = SDL_CreateWindow("Hello Triangle", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCR_WIDTH, SCR_HEIGHT,
+                            SDL_WINDOW_OPENGL);
   if (!window) {
     std::cerr << "Failed to create SDL window: " << SDL_GetError() << std::endl;
     SDL_Quit();

@@ -5,6 +5,7 @@
 build/
 cmake-build-*/
 prefix/
+.cache/
 .clangd
 CMakeLists.txt.user
 CMakeUserPresets.json
