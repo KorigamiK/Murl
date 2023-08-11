@@ -11,9 +11,12 @@ project(
 add_subdirectory(lib)
 
 file(GLOB_RECURSE SOURCES "src/*.cc")
-file(GLOB_RECURSE HEADERS "include/*.hh")
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+message(STATUS "Sources: ${SOURCES}")
+
+# aux_source_directory(src/ SOURCES)
+
+add_executable(${PROJECT_NAME} ${SOURCES})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
 if (EMSCRIPTEN)
@@ -45,9 +48,12 @@ else()
 	find_package(PkgConfig REQUIRED)
 	pkg_check_modules(SDL2 REQUIRED sdl2) # SDL2
 	pkg_check_modules(GLEW REQUIRED glew) # GL Extension Wrangler (GLEW)
+  pkg_check_modules(SDL2_mixer REQUIRED SDL2_mixer) # SDL2_mixer
 
 	message(STATUS "SDL2_INCLUDE_DIRS: ${SDL2_INCLUDE_DIRS}")
 	message(STATUS "SDL2_LIBRARIES: ${SDL2_LIBRARIES}")
+  message(STATUS "SDL2_mixer_INCLUDE_DIRS: ${SDL2_mixer_INCLUDE_DIRS}")
+  message(STATUS "SDL2_mixer_LIBRARIES: ${SDL2_mixer_LIBRARIES}")
 	message(STATUS "GLEW_INCLUDE_DIRS: ${GLEW_INCLUDE_DIRS}")
 	message(STATUS "GLEW_LIBRARIES: ${GLEW_LIBRARIES}")
 	message(STATUS "GLM_INCLUDE_DIRS: ${GLM_INCLUDE_DIRS}")
@@ -58,6 +64,7 @@ else()
 			${CMAKE_SOURCE_DIR}/include
 		PRIVATE
 			${SDL2_INCLUDE_DIRS}
+      ${SDL2_mixer_INCLUDE_DIRS}
 			${GLEW_INCLUDE_DIRS}
 			${GLM_INCLUDE_DIRS}
 	)
@@ -68,6 +75,7 @@ else()
 			LibMurl 
 		PUBLIC
 			${SDL2_LIBRARIES}
+      ${SDL2_mixer_LIBRARIES}
 			${GLEW_LIBRARIES}
 	)
 

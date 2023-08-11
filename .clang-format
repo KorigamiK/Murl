@@ -2,3 +2,5 @@
 Language: Cpp
 BasedOnStyle: Chromium
 ColumnLimit: 120
+AllowShortIfStatementsOnASingleLine: true 
+AllowShortLoopsOnASingleLine: true

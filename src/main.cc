@@ -1,26 +1,95 @@
+#include <array>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "SDL_video.h"
+#include "SDL_events.h"
+#include "SDL_stdinc.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #define exit(code) emscripten_force_exit(code)
 #endif
 
-const char* vertexShaderPath = "shaders/default.vert.glsl";
-const char* fragmentShaderPath = "shaders/default.frag.glsl";
+// Audio sutff
+constexpr int frequency = 22050;
+constexpr Uint16 format = MIX_DEFAULT_FORMAT;  // almost always 16-bit(Uint16) audio
+const constexpr int channels = 2;
+const constexpr int chunksize = 512;
 
+bool isPlaying = false;
+
+using audioFormat = Uint16;
+constexpr int bytesPerSample = sizeof(audioFormat) * channels;
+const int audioBufferSize = chunksize * channels;  // NOTE: this is arbitrary, we can use any size we want
+
+struct AudioBuffer {
+  int samplesCounter = 0;
+  std::array<double, audioBufferSize> buffer;
+  std::mutex buffer_mutex;
+};
+
+AudioBuffer audioBuffer;
+
+void audioCallback(void* userdata, Uint8* stream, int len) {
+  /* One sample per frame for mono output, two samples per frame in a stereo setup, etc
+   * Here len is just the number of frames that are determined by the chunksize = 8192
+   * but to be sure we'll manually allocate the data instead.
+   * So, 1 stream = 8192 bytes
+   *              = 2048 samples
+   *              = channels * format / 8
+   *              = chunksize * channels * sizeof(Uint16)
+   * This helped me https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Audio_concepts#audio_channels_and_frames
+   * */
+  AudioBuffer* audio = static_cast<AudioBuffer*>(userdata);
+  std::cout << "Audio callback called with len: " << len << std::endl;
+  // copy the stream into the buffer as much as we can then overwrite the rest
+  int samples = len / bytesPerSample;
+  if (audio->samplesCounter + samples > audioBufferSize) {
+    // buffer overflow, discard what ever is in the buffer and start over
+    for (size_t n = 0; n < audioBufferSize; n++) audio->buffer[n] = 0;
+    audio->samplesCounter = 0;
+  }
+  int n = 0;
+  for (uint16_t i = 0; i < samples; i++) {
+    switch (bytesPerSample) {
+      /* case 1:;
+        int8_t* buf8 = (int8_t*)&buf[n];
+        audio->cava_in[i + audio->samples_counter] = *buf8 * UCHAR_MAX;
+        break; */
+      case 3:
+      case 4: {
+        int32_t* buf32 = (int32_t*)&stream[n];
+        audio->buffer[i + audio->samplesCounter] = (double)*buf32 / USHRT_MAX;
+      } break;
+      default: {
+        // int16_t* buf16 = (int16_t*)&buf[n];
+        // audio->cava_in[i + audio->samples_counter] = *buf16;
+        std::cerr << "Unsupported number of bytes per sample: " << bytesPerSample << std::endl;
+      } break;
+    }
+    n += bytesPerSample;
+  }
+  audio->samplesCounter += samples;
+  audio->buffer_mutex.unlock();
+}
+
+Mix_Music* music = nullptr;
 unsigned int SCR_WIDTH = 800;
 unsigned int SCR_HEIGHT = 600;
+
+const char* vertexShaderPath = "shaders/default.vert.glsl";
+const char* fragmentShaderPath = "shaders/default.frag.glsl";
 
 // Function to read shader code from a file
 std::string ReadShaderCode(const char* filePath) {
@@ -89,6 +158,7 @@ GLuint CreateShaderProgram(const char* vertexCode, const char* fragmentCode) {
 
 static GLuint shaderProgram;
 static GLuint VBO, VAO;
+GLuint transformLoc;
 static void* mainLoopArg;
 static SDL_Window* window;
 
@@ -96,7 +166,7 @@ static SDL_Window* window;
 glm::mat4 transform = glm::mat4(1.0f);
 bool quit = false;
 
-void mainLoop(void* arg) {
+inline void mainLoop(void* arg) {
   (void)arg;
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -109,6 +179,13 @@ void mainLoop(void* arg) {
           case SDLK_ESCAPE:
             quit = true;
             break;
+          case SDLK_SPACE:
+            if (isPlaying)
+              Mix_PauseMusic();
+            else
+              Mix_ResumeMusic();
+            isPlaying = !isPlaying;
+            break;
         }
         break;
       case SDL_WINDOWEVENT:
@@ -119,6 +196,20 @@ void mainLoop(void* arg) {
             SCR_HEIGHT = event.window.data2;
             break;
         }
+      case SDL_DROPFILE:
+        if (event.drop.type == SDL_DROPFILE) {
+          std::cout << "File dropped: " << event.drop.file << std::endl;
+          char* const droppedFilePath = event.drop.file;
+          SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "File dropped on window", droppedFilePath, window);
+          music = Mix_LoadMUS(droppedFilePath);
+          if (music) {
+            Mix_PlayMusic(music, -1);
+            Mix_SetPostMix(audioCallback, static_cast<void*>(&audioBuffer));
+            isPlaying = true;
+            SDL_free(droppedFilePath);
+          }
+        }
+        break;
       default:
         break;
     }
@@ -137,8 +228,17 @@ void mainLoop(void* arg) {
 
   // Use shader program and set uniforms
   glUseProgram(shaderProgram);
-  GLuint transformLoc = glGetUniformLocation(shaderProgram, "transform");
   glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
+
+  // print the buffer data
+  if (isPlaying and audioBuffer.samplesCounter > 0) {
+    std::cout << "Samples counter: " << audioBuffer.samplesCounter << std::endl;
+    // std::cout << "Buffer data: ";
+    // for (int i = 0; i < audioBuffer.samplesCounter; i++) {
+    //   std::cout << audioBuffer.buffer[i] << " ";
+    // }
+    std::cout << std::endl;
+  }
 
   // Draw the triangle
   glBindVertexArray(VAO);
@@ -149,12 +249,29 @@ void mainLoop(void* arg) {
   SDL_GL_SwapWindow(window);
 };
 
-int main() {
+int main(int argc, char* argv[]) {
+  (void)argc, (void)argv;
+
   // Initialize SDL and create a window
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+  if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
     std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
     return EXIT_FAILURE;
   }
+
+  SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+
+  // Initialize SDL2_mixer
+  if (Mix_OpenAudio(frequency, format, channels, chunksize) < 0) {
+    std::cerr << "Failed to initialize SDL2_mixer: " << SDL_GetError() << std::endl;
+    return EXIT_FAILURE;
+  }
+  // print audio info
+  // Mix_QuerySpec(&frequency, &format, &channels);
+  std::cout << "Frequency: " << frequency << std::endl;
+  std::cout << "Format: " << format << std::endl;
+  std::cout << "Channels: " << channels << std::endl;
+  std::cout << "Chunksize: " << chunksize << std::endl;
+  std::cout << "Bytes per sample: " << bytesPerSample << std::endl;
 
   window = SDL_CreateWindow("Hello Triangle", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCR_WIDTH, SCR_HEIGHT,
                             SDL_WINDOW_OPENGL);
@@ -182,10 +299,19 @@ int main() {
     return EXIT_FAILURE;
   }
 
+  int glVersion[2] = {-1, 1};
+  glGetIntegerv(GL_MAJOR_VERSION, &glVersion[0]);
+  glGetIntegerv(GL_MINOR_VERSION, &glVersion[1]);
+
+  std::cerr << "Using OpenGL: " << glVersion[0] << "." << glVersion[1] << std::endl;
+  std::cerr << "Renderer used: " << glGetString(GL_RENDERER) << std::endl;
+  std::cerr << "Shading Language: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
+
   // Load and compile shaders
   std::string vertexShaderCode = ReadShaderCode(vertexShaderPath);
   std::string fragmentShaderCode = ReadShaderCode(fragmentShaderPath);
   shaderProgram = CreateShaderProgram(vertexShaderCode.c_str(), fragmentShaderCode.c_str());
+  GLuint transformLoc = glGetUniformLocation(shaderProgram, "transform");
 
   // Triangle vertices
   float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
@@ -216,6 +342,11 @@ int main() {
   glDeleteVertexArrays(1, &VAO);
   glDeleteBuffers(1, &VBO);
   glDeleteProgram(shaderProgram);
+
+  Mix_HaltMusic();
+  Mix_FreeMusic(music);
+  Mix_CloseAudio();
+  Mix_Quit();
 
   SDL_GL_DeleteContext(glContext);
   SDL_DestroyWindow(window);
