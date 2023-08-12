@@ -2,7 +2,6 @@
 #include <cassert>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -14,19 +13,19 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "SDL_events.h"
-#include "SDL_stdinc.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #define exit(code) emscripten_force_exit(code)
+#else
+#define EMSCRIPTEN_KEEPALIVE
 #endif
 
 // Audio sutff
 constexpr int frequency = 22050;
 constexpr Uint16 format = MIX_DEFAULT_FORMAT;  // almost always 16-bit(Uint16) audio
 const constexpr int channels = 2;
-const constexpr int chunksize = 512;
+const constexpr int chunksize = 256;
 
 bool isPlaying = false;
 
@@ -42,20 +41,20 @@ struct AudioBuffer {
 
 AudioBuffer audioBuffer;
 
+/* One sample per frame for mono output, two samples per frame in a stereo setup, etc
+ * Here len is just the number of frames that are determined by the chunksize = 8192
+ * but to be sure we'll manually allocate the data instead.
+ * So, 1 stream = 8192 bytes
+ *              = 2048 samples
+ *              = channels * format / 8
+ *              = chunksize * channels * sizeof(Uint16)
+ * This helped me https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Audio_concepts#audio_channels_and_frames
+ * */
 void audioCallback(void* userdata, Uint8* stream, int len) {
-  /* One sample per frame for mono output, two samples per frame in a stereo setup, etc
-   * Here len is just the number of frames that are determined by the chunksize = 8192
-   * but to be sure we'll manually allocate the data instead.
-   * So, 1 stream = 8192 bytes
-   *              = 2048 samples
-   *              = channels * format / 8
-   *              = chunksize * channels * sizeof(Uint16)
-   * This helped me https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Audio_concepts#audio_channels_and_frames
-   * */
+  if (!isPlaying) return;
   AudioBuffer* audio = static_cast<AudioBuffer*>(userdata);
-  // copy the stream into the buffer as much as we can then overwrite the rest
   int samples = len / bytesPerSample;
-  if (isPlaying) std::cout << "Audio callback called with samples: " << samples << std::endl;
+  audio->buffer_mutex.lock();
   if (audio->samplesCounter + samples > audioBufferSize) {
     // buffer overflow, discard what ever is in the buffer and start over
     for (size_t n = 0; n < audioBufferSize; n++) audio->buffer[n] = 0;
@@ -65,8 +64,9 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
   for (uint16_t i = 0; i < samples; i++) {
     switch (bytesPerSample) {
       case 4: {
-        assert(channels == 2);  // only support stereo
+        // only support stereo
         // only put left channel into the buffer
+        assert(channels == 2);
         int16_t* buf16 = (int16_t*)&stream[n];
         audio->buffer[i + audio->samplesCounter] = (float)*buf16 / (float)INT16_MAX;
       } break;
@@ -87,7 +87,6 @@ unsigned int SCR_HEIGHT = 600;
 const char* vertexShaderPath = "shaders/default.vert.glsl";
 const char* fragmentShaderPath = "shaders/default.frag.glsl";
 
-// Function to read shader code from a file
 std::string ReadShaderCode(const char* filePath) {
   std::ifstream shaderFile(filePath);
   if (!shaderFile.is_open()) {
@@ -153,11 +152,25 @@ GLuint CreateShaderProgram(const char* vertexCode, const char* fragmentCode) {
 }
 
 static GLuint shaderProgram;
-static GLuint VBO, VAO;
-GLuint transformLoc, waveDataLoc, timeLoc;
+static GLuint VAO, VBO, EBO;
+GLuint transformLoc, waveDataLoc, timeLoc, resLoc;
 static void* mainLoopArg;
 static SDL_Window* window;
 
+extern "C" {
+EMSCRIPTEN_KEEPALIVE void loadAudioFile(const char* droppedFilePath) {
+  SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "File dropped on window", droppedFilePath, window);
+  music = Mix_LoadMUS(droppedFilePath);
+  if (music) {
+    Mix_PlayMusic(music, -1);
+    Mix_SetPostMix(audioCallback, static_cast<void*>(&audioBuffer));
+    isPlaying = true;
+    SDL_free((void*)droppedFilePath);
+  }
+}
+}
+
+// Load and compile shaders
 void loadShaders() {
   std::string vertexShaderCode = ReadShaderCode(vertexShaderPath);
   std::string fragmentShaderCode = ReadShaderCode(fragmentShaderPath);
@@ -168,6 +181,7 @@ void loadShaders() {
   transformLoc = glGetUniformLocation(shaderProgram, "transform");
   waveDataLoc = glGetUniformLocation(shaderProgram, "waveData");
   timeLoc = glGetUniformLocation(shaderProgram, "time");
+  resLoc = glGetUniformLocation(shaderProgram, "resolution");
 }
 
 // Matrices for transformation
@@ -187,18 +201,16 @@ inline void mainLoop(void* arg) {
           case SDLK_ESCAPE:
             quit = true;
             break;
-          case SDLK_SPACE:
+          case SDLK_SPACE: {
             if (isPlaying)
               Mix_PauseMusic();
             else
               Mix_ResumeMusic();
             isPlaying = !isPlaying;
-            break;
-          case SDLK_r: {  // reload the shader
+          } break;
+          case SDLK_r: {
             std::cout << "Reloading shader" << std::endl;
-            std::string vertexShaderCode = ReadShaderCode(vertexShaderPath);
-            std::string fragmentShaderCode = ReadShaderCode(fragmentShaderPath);
-            shaderProgram = CreateShaderProgram(vertexShaderCode.c_str(), fragmentShaderCode.c_str());
+            loadShaders();
           } break;
         }
         break;
@@ -214,14 +226,7 @@ inline void mainLoop(void* arg) {
         if (event.drop.type == SDL_DROPFILE) {
           std::cout << "File dropped: " << event.drop.file << std::endl;
           char* const droppedFilePath = event.drop.file;
-          SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "File dropped on window", droppedFilePath, window);
-          music = Mix_LoadMUS(droppedFilePath);
-          if (music) {
-            Mix_PlayMusic(music, -1);
-            Mix_SetPostMix(audioCallback, static_cast<void*>(&audioBuffer));
-            isPlaying = true;
-            SDL_free(droppedFilePath);
-          }
+          loadAudioFile(droppedFilePath);
         }
         break;
       default:
@@ -229,16 +234,14 @@ inline void mainLoop(void* arg) {
     }
   }
 
-  // Update the time
-  float time = static_cast<float>(SDL_GetTicks()) / 1000.0f;
-  glUniform1f(timeLoc, time);
-
+  /*
   // Update transform matrix based on mouse position
   int mouseX, mouseY;
   SDL_GetMouseState(&mouseX, &mouseY);
   float xPos = static_cast<float>(mouseX) / static_cast<float>(SCR_WIDTH) * 2.0f - 1.0f;
   float yPos = -static_cast<float>(mouseY) / static_cast<float>(SCR_HEIGHT) * 2.0f + 1.0f;
   transform = glm::translate(glm::mat4(1.0f), glm::vec3(xPos, yPos, 0.0f));
+  // */
 
   // Clear the screen
   glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
@@ -247,7 +250,12 @@ inline void mainLoop(void* arg) {
   // Use shader program and set uniforms
   glUseProgram(shaderProgram);
   glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(transform));
+  float time = static_cast<float>(SDL_GetTicks()) / 1000.0f;  // Update the time
+  glUniform1f(timeLoc, time);
+  glUniform1fv(waveDataLoc, audioBuffer.buffer.size(), audioBuffer.buffer.data());
+  glUniform2f(resLoc, SCR_WIDTH, SCR_HEIGHT);
 
+  /*
   // print the buffer data
   if (isPlaying and audioBuffer.samplesCounter > 0) {
     std::cout << "Samples counter: " << audioBuffer.samplesCounter << std::endl;
@@ -257,10 +265,11 @@ inline void mainLoop(void* arg) {
     }
     std::cout << std::endl;
   }
+  // */
 
   // Draw the triangle
   glBindVertexArray(VAO);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
   glBindVertexArray(0);
 
   // Swap buffers
@@ -326,22 +335,43 @@ int main(int argc, char* argv[]) {
   std::cerr << "Renderer used: " << glGetString(GL_RENDERER) << std::endl;
   std::cerr << "Shading Language: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 
-  // Load and compile shaders
   loadShaders();
 
-  // Triangle vertices
-  float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
+  // clang-format off
+  // Vertex data
+  GLfloat vertices[] = {
+    -1.0f, -1.0f, 
+    1.0f, -1.0f, 
+    1.0f, 1.0f, 
+    -1.0f, 1.0f
+  };
+  
+  // Index data
+  GLuint indices[] = {
+    0, 1, 2, 
+    2, 3, 0
+  };
+  // clang-format on
 
   // Vertex buffer object (VBO) and vertex array object (VAO)
-  glGenBuffers(1, &VBO);
   glGenVertexArrays(1, &VAO);
+  glGenBuffers(1, &VBO);
+  glGenBuffers(1, &EBO);
 
   glBindVertexArray(VAO);
+
+  // Bind and initialize the VBO with vertex data
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+  // Bind and initialize the EBO with index data
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+  // Set vertex attribute pointers
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (void*)0);
   glEnableVertexAttribArray(0);
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
+
   glBindVertexArray(0);
 
 #ifdef __EMSCRIPTEN__
