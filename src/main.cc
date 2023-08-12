@@ -52,9 +52,9 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
    * This helped me https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Audio_concepts#audio_channels_and_frames
    * */
   AudioBuffer* audio = static_cast<AudioBuffer*>(userdata);
-  std::cout << "Audio callback called with len: " << len << std::endl;
   // copy the stream into the buffer as much as we can then overwrite the rest
   int samples = len / bytesPerSample;
+  std::cout << "Audio callback called with samples: " << samples << std::endl;
   if (audio->samplesCounter + samples > audioBufferSize) {
     // buffer overflow, discard what ever is in the buffer and start over
     for (size_t n = 0; n < audioBufferSize; n++) audio->buffer[n] = 0;
@@ -158,7 +158,7 @@ GLuint CreateShaderProgram(const char* vertexCode, const char* fragmentCode) {
 
 static GLuint shaderProgram;
 static GLuint VBO, VAO;
-GLuint transformLoc;
+GLuint transformLoc, waveDataLoc, timeLoc;
 static void* mainLoopArg;
 static SDL_Window* window;
 
@@ -214,6 +214,10 @@ inline void mainLoop(void* arg) {
         break;
     }
   }
+
+  // Update the time
+  float time = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+  glUniform1f(timeLoc, time);
 
   // Update transform matrix based on mouse position
   int mouseX, mouseY;
@@ -272,6 +276,7 @@ int main(int argc, char* argv[]) {
   std::cout << "Channels: " << channels << std::endl;
   std::cout << "Chunksize: " << chunksize << std::endl;
   std::cout << "Bytes per sample: " << bytesPerSample << std::endl;
+  std::cout << "Audio Buffer size: " << audioBufferSize << std::endl;
 
   window = SDL_CreateWindow("Hello Triangle", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCR_WIDTH, SCR_HEIGHT,
                             SDL_WINDOW_OPENGL);
@@ -311,7 +316,9 @@ int main(int argc, char* argv[]) {
   std::string vertexShaderCode = ReadShaderCode(vertexShaderPath);
   std::string fragmentShaderCode = ReadShaderCode(fragmentShaderPath);
   shaderProgram = CreateShaderProgram(vertexShaderCode.c_str(), fragmentShaderCode.c_str());
-  GLuint transformLoc = glGetUniformLocation(shaderProgram, "transform");
+  transformLoc = glGetUniformLocation(shaderProgram, "transform");
+  waveDataLoc = glGetUniformLocation(shaderProgram, "waveData");
+  timeLoc = glGetUniformLocation(shaderProgram, "time");
 
   // Triangle vertices
   float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
