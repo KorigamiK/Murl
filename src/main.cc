@@ -1,4 +1,5 @@
 #include <array>
+#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -35,7 +36,7 @@ const int audioBufferSize = chunksize * channels;  // NOTE: this is arbitrary, w
 
 struct AudioBuffer {
   int samplesCounter = 0;
-  std::array<double, audioBufferSize> buffer;
+  std::array<float, audioBufferSize> buffer;
   std::mutex buffer_mutex;
 };
 
@@ -54,7 +55,7 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
   AudioBuffer* audio = static_cast<AudioBuffer*>(userdata);
   // copy the stream into the buffer as much as we can then overwrite the rest
   int samples = len / bytesPerSample;
-  std::cout << "Audio callback called with samples: " << samples << std::endl;
+  if (isPlaying) std::cout << "Audio callback called with samples: " << samples << std::endl;
   if (audio->samplesCounter + samples > audioBufferSize) {
     // buffer overflow, discard what ever is in the buffer and start over
     for (size_t n = 0; n < audioBufferSize; n++) audio->buffer[n] = 0;
@@ -63,18 +64,13 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
   int n = 0;
   for (uint16_t i = 0; i < samples; i++) {
     switch (bytesPerSample) {
-      /* case 1:;
-        int8_t* buf8 = (int8_t*)&buf[n];
-        audio->cava_in[i + audio->samples_counter] = *buf8 * UCHAR_MAX;
-        break; */
-      case 3:
       case 4: {
-        int32_t* buf32 = (int32_t*)&stream[n];
-        audio->buffer[i + audio->samplesCounter] = (double)*buf32 / USHRT_MAX;
+        assert(channels == 2);  // only support stereo
+        // only put left channel into the buffer
+        int16_t* buf16 = (int16_t*)&stream[n];
+        audio->buffer[i + audio->samplesCounter] = (float)*buf16 / (float)INT16_MAX;
       } break;
       default: {
-        // int16_t* buf16 = (int16_t*)&buf[n];
-        // audio->cava_in[i + audio->samples_counter] = *buf16;
         std::cerr << "Unsupported number of bytes per sample: " << bytesPerSample << std::endl;
       } break;
     }
@@ -162,6 +158,18 @@ GLuint transformLoc, waveDataLoc, timeLoc;
 static void* mainLoopArg;
 static SDL_Window* window;
 
+void loadShaders() {
+  std::string vertexShaderCode = ReadShaderCode(vertexShaderPath);
+  std::string fragmentShaderCode = ReadShaderCode(fragmentShaderPath);
+  GLuint newShaderProgram = CreateShaderProgram(vertexShaderCode.c_str(), fragmentShaderCode.c_str());
+  // destroy the old shader
+  glDeleteProgram(shaderProgram);
+  shaderProgram = newShaderProgram;
+  transformLoc = glGetUniformLocation(shaderProgram, "transform");
+  waveDataLoc = glGetUniformLocation(shaderProgram, "waveData");
+  timeLoc = glGetUniformLocation(shaderProgram, "time");
+}
+
 // Matrices for transformation
 glm::mat4 transform = glm::mat4(1.0f);
 bool quit = false;
@@ -186,6 +194,12 @@ inline void mainLoop(void* arg) {
               Mix_ResumeMusic();
             isPlaying = !isPlaying;
             break;
+          case SDLK_r: {  // reload the shader
+            std::cout << "Reloading shader" << std::endl;
+            std::string vertexShaderCode = ReadShaderCode(vertexShaderPath);
+            std::string fragmentShaderCode = ReadShaderCode(fragmentShaderPath);
+            shaderProgram = CreateShaderProgram(vertexShaderCode.c_str(), fragmentShaderCode.c_str());
+          } break;
         }
         break;
       case SDL_WINDOWEVENT:
@@ -237,10 +251,10 @@ inline void mainLoop(void* arg) {
   // print the buffer data
   if (isPlaying and audioBuffer.samplesCounter > 0) {
     std::cout << "Samples counter: " << audioBuffer.samplesCounter << std::endl;
-    // std::cout << "Buffer data: ";
-    // for (int i = 0; i < audioBuffer.samplesCounter; i++) {
-    //   std::cout << audioBuffer.buffer[i] << " ";
-    // }
+    std::cout << "Buffer data: ";
+    for (int i = 0; i < audioBuffer.samplesCounter; i++) {
+      std::cout << audioBuffer.buffer[i] << " ";
+    }
     std::cout << std::endl;
   }
 
@@ -313,12 +327,7 @@ int main(int argc, char* argv[]) {
   std::cerr << "Shading Language: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 
   // Load and compile shaders
-  std::string vertexShaderCode = ReadShaderCode(vertexShaderPath);
-  std::string fragmentShaderCode = ReadShaderCode(fragmentShaderPath);
-  shaderProgram = CreateShaderProgram(vertexShaderCode.c_str(), fragmentShaderCode.c_str());
-  transformLoc = glGetUniformLocation(shaderProgram, "transform");
-  waveDataLoc = glGetUniformLocation(shaderProgram, "waveData");
-  timeLoc = glGetUniformLocation(shaderProgram, "time");
+  loadShaders();
 
   // Triangle vertices
   float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
