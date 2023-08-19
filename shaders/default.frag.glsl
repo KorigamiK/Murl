@@ -8,9 +8,9 @@ uniform float time;
 
 out vec4 FragColor;
 
-#define THICKNESS 0.02
+#define THICKNESS 0.04
 
-void InterpolateValue(in float index, out float value) {
+void interpolateValue(in float index, out float value) {
   float norm = 255.0f / resolution.x * index;
   int Floor = int(floor(norm));
   int Ceil = int(ceil(norm));
@@ -22,11 +22,10 @@ void main() {
   float y = gl_FragCoord.y / resolution.y;
 
   float wave = 0.0f;
-  InterpolateValue(x * resolution.x, wave);
+  interpolateValue(x * resolution.x, wave);
 
   wave = 0.5f - wave / 3.0f; //centers wave
 
   float r = abs(THICKNESS / (wave - y));
-  FragColor = vec4(r - abs(r * 0.2f * sin(time / 5.0f)), r - abs(r * 0.2f * sin(time / 7.0f)), r - abs(r * 0.2f * sin(time / 9.0f)), 0);
-
+  FragColor = vec4(r - abs(r * 0.9f * sin(time / 5.0f)), r - abs(r * 0.9f * sin(time / 7.0f)), r - abs(r * 0.9f * sin(time / 9.0f)), 0);
 }
