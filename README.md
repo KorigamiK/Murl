@@ -5,7 +5,10 @@
 Murl is a simple, lightweight, cross-platform, modern, C++ implementation of
 a music visualization application. 
 
-![visualizer](docs/visualizer.gif)
+<!-- put docs/visualizer.gif in the center -->
+<p align="center">
+  <img src="docs/visualizer.gif" alt="Visualizer" />
+</p>
 
 It is based on the following libraries:
 
