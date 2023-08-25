@@ -1,13 +1,15 @@
 # Music Uptake Renderer Library - _Murl_
 
 > Still a work in progress.
+>> The devlog and the _Web Demo_ are available at [my blog](https://korigamik.zc.al/blog/music_tour/).
 
 Murl is a simple, lightweight, cross-platform, modern, C++ implementation of
 a music visualization application. 
 
-<!-- put docs/visualizer.gif in the center -->
+
 <p align="center">
   <img src="docs/visualizer.gif" alt="Visualizer" />
+  View the <a href="https://korigamik.zc.al/extern/Murl.html">Web Demo</a>
 </p>
 
 It is based on the following libraries:
