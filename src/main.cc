@@ -61,7 +61,7 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
     audio->samplesCounter = 0;
   }
   int n = 0;
-  for (uint16_t i = 0; i < samples; i++) {
+  for (uint16_t i = 0; i < samples; ++i) {
     switch (bytesPerSample) {
       case 4: {
         // only support stereo
@@ -158,15 +158,25 @@ static void* mainLoopArg;
 static SDL_Window* window;
 
 extern "C" {
-EMSCRIPTEN_KEEPALIVE void loadAudioFile(const char* droppedFilePath) {
+
+EMSCRIPTEN_KEEPALIVE void loadAudioFile(char* droppedFilePath) {
   SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "File dropped on window", droppedFilePath, window);
+  // check if file exists
+  if (!std::ifstream(droppedFilePath)) {
+    std::cerr << "File not found: " << droppedFilePath << std::endl;
+    return;
+  }
   music = Mix_LoadMUS(droppedFilePath);
+  std::cerr << "File dropped: " << droppedFilePath << std::endl;
   if (music) {
     Mix_PlayMusic(music, -1);
     Mix_SetPostMix(audioCallback, static_cast<void*>(&audioBuffer));
     isPlaying = true;
-    SDL_free((void*)droppedFilePath);
+  } else {
+    // print error that occured
+    std::cerr << "Failed to load audio file: " << droppedFilePath << std::endl << Mix_GetError() << std::endl;
   }
+  SDL_free((void*)droppedFilePath);
 }
 }
 
@@ -224,7 +234,6 @@ inline void mainLoop(void* arg) {
         }
       case SDL_DROPFILE:
         if (event.drop.type == SDL_DROPFILE) {
-          std::cout << "File dropped: " << event.drop.file << std::endl;
           char* const droppedFilePath = event.drop.file;
           loadAudioFile(droppedFilePath);
         }
@@ -276,8 +285,9 @@ inline void mainLoop(void* arg) {
   SDL_GL_SwapWindow(window);
 };
 
+extern "C" {
 int main(int argc, char* argv[]) {
-  (void)argc, (void)argv;
+  // (void)argc, (void)argv;
 
   // Initialize SDL and create a window
   if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
@@ -399,4 +409,5 @@ int main(int argc, char* argv[]) {
   SDL_Quit();
 
   return 0;
+}
 }
