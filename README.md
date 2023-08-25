@@ -9,7 +9,7 @@ a music visualization application.
 
 <p align="center">
   <img src="docs/visualizer.gif" alt="Visualizer" />
-  View the <a href="https://korigamik.zc.al/extern/Murl.html">Web Demo</a>
+  <p align="center">View the <a href="https://korigamik.zc.al/extern/Murl.html">Web Demo</a></p>
 </p>
 
 It is based on the following libraries:
