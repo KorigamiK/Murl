@@ -31,7 +31,7 @@ bool isPlaying = false;
 
 using audioFormat = Uint16;
 constexpr int bytesPerSample = sizeof(audioFormat) * channels;
-const int audioBufferSize = chunksize * channels;  // NOTE: this is arbitrary, we can use any size we want
+const int audioBufferSize = chunksize /**  channels*/ ;  // NOTE: this is arbitrary, we can use any size we want
 
 struct AudioBuffer {
   int samplesCounter = 0;
@@ -57,7 +57,7 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
   audio->buffer_mutex.lock();
   if (audio->samplesCounter + samples > audioBufferSize) {
     // buffer overflow, discard what ever is in the buffer and start over
-    for (size_t n = 0; n < audioBufferSize; n++) audio->buffer[n] = 0;
+    // for (size_t n = 0; n < audioBufferSize; ++n) audio->buffer[n] = 0;
     audio->samplesCounter = 0;
   }
   int n = 0;
@@ -68,6 +68,7 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
         // only put left channel into the buffer
         assert(channels == 2);
         int16_t* buf16 = (int16_t*)&stream[n];
+        if (i + audio->samplesCounter >= audioBufferSize) continue;
         audio->buffer[i + audio->samplesCounter] = (float)*buf16 / (float)INT16_MAX;
       } break;
       default: {

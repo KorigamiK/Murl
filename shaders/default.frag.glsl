@@ -2,7 +2,7 @@
 
 precision mediump float;
 
-uniform float waveData[512];
+uniform float waveData[256];
 uniform vec2 resolution;
 uniform float time;
 
