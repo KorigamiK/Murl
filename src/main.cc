@@ -207,16 +207,19 @@ inline void mainLoop(void* arg) {
       case SDL_QUIT:
         quit = true;
         break;
+      case SDL_FINGERDOWN: {
+        if (isPlaying) Mix_PauseMusic();
+        else Mix_ResumeMusic();
+        isPlaying = !isPlaying;
+      } break;
       case SDL_KEYDOWN:
         switch (event.key.keysym.sym) {
           case SDLK_ESCAPE:
             quit = true;
             break;
           case SDLK_SPACE: {
-            if (isPlaying)
-              Mix_PauseMusic();
-            else
-              Mix_ResumeMusic();
+            if (isPlaying) Mix_PauseMusic();
+            else Mix_ResumeMusic();
             isPlaying = !isPlaying;
           } break;
           case SDLK_r: {
